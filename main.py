@@ -2496,21 +2496,43 @@ async def create_sse_server():
     from mcp.server.sse import SseServerTransport
     from starlette.applications import Starlette
     from starlette.routing import Mount, Route
-    from starlette.responses import Response
+    from starlette.responses import Response, PlainTextResponse
     import uvicorn
+    import asyncio
     
     # Create SSE transport
     transport = SseServerTransport("/messages")
     
-    # Define SSE handler function
+    # Define SSE handler function with proper error handling
     async def handle_sse(request):
         """Handle SSE connections and return session ID."""
-        async with transport.connect_sse(
-            request.scope, request.receive, request._send
-        ) as streams:
-            await mcp._mcp_server.run(
-                streams[0], streams[1], mcp._mcp_server.create_initialization_options()
-            )
+        try:
+            # Set response headers for SSE
+            headers = {
+                "Cache-Control": "no-store",
+                "Content-Type": "text/event-stream; charset=utf-8",
+                "Connection": "keep-alive",
+                "x-accel-buffering": "no"
+            }
+            
+            # Use transport's connect_sse method to handle the connection
+            async with transport.connect_sse(
+                request.scope, request.receive, request._send
+            ) as streams:
+                # Run the MCP server with the streams
+                await mcp._mcp_server.run(
+                    streams[0], streams[1], mcp._mcp_server.create_initialization_options()
+                )
+                
+            # We should never reach here during normal operation
+            # The connection should be kept open by the transport
+            return None
+        except asyncio.CancelledError:
+            # This is expected when the client disconnects
+            return None
+        except Exception as e:
+            print(f"SSE connection error: {e}")
+            return PlainTextResponse(f"SSE connection failed: {e}", status_code=500)
     
     # Define health check endpoint
     async def health_check(request):

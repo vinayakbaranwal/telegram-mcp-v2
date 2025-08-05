@@ -2491,6 +2491,52 @@ async def initialize_telegram_client():
             )
         return False
 
+async def create_sse_server():
+    """Create a proper SSE server with session ID support using Starlette and SseServerTransport."""
+    from mcp.server.sse import SseServerTransport
+    from starlette.applications import Starlette
+    from starlette.routing import Mount, Route
+    from starlette.responses import Response
+    import uvicorn
+    
+    # Create SSE transport
+    transport = SseServerTransport("/messages")
+    
+    # Define SSE handler function
+    async def handle_sse(request):
+        """Handle SSE connections and return session ID."""
+        async with transport.connect_sse(
+            request.scope, request.receive, request._send
+        ) as streams:
+            await mcp._mcp_server.run(
+                streams[0], streams[1], mcp._mcp_server.create_initialization_options()
+            )
+    
+    # Define health check endpoint
+    async def health_check(request):
+        """Health check endpoint for Docker."""
+        return Response("OK", status_code=200)
+    
+    # Create Starlette routes
+    routes = [
+        Route("/sse", endpoint=handle_sse),
+        Route("/health", endpoint=health_check),
+        Mount("/messages", app=transport.handle_post_message),
+    ]
+    
+    # Create Starlette application
+    app = Starlette(routes=routes)
+    
+    # Run the server
+    config = uvicorn.Config(
+        app=app,
+        host=args.host,
+        port=args.port,
+        log_level="info"
+    )
+    server = uvicorn.Server(config)
+    await server.serve()
+
 if __name__ == "__main__":
     # Initialize Telegram client first
     if not asyncio.run(initialize_telegram_client()):
@@ -2510,19 +2556,8 @@ if __name__ == "__main__":
             else:
                 print("WARNING: SSE authentication disabled (no API key set)")
             
-            mount_path = getattr(args, 'mount_path', None)
-            if mount_path:
-                print(f"Mount path: {mount_path}")
-            
-            # Environment variables should already be set at module level
-            print(f"Using Uvicorn host: {os.environ.get('UVICORN_HOST', 'default')}")
-            print(f"Using Uvicorn port: {os.environ.get('UVICORN_PORT', 'default')}")
-            
-            # Run SSE server with correct parameters
-            mcp.run(
-                transport="sse",
-                mount_path=mount_path
-            )
+            # Run custom SSE server with proper session ID support
+            asyncio.run(create_sse_server())
         else:
             print(f"Invalid transport type: {args.transport}", file=sys.stderr)
             sys.exit(1)

@@ -8,15 +8,15 @@ services:
     # Load environment variables from a .env file in the same directory
     env_file:
       - .env
-    # Port mapping for SSE/HTTP transport
+    # Port mapping for SSE/HTTP transport (external:internal)
     ports:
-      - "3001:3001"
+      - "3001:8000"
     # Production SSE mode - no stdin/tty needed
     command: ["python", "main.py", "-t", "sse", "--port", "3001", "--host", "0.0.0.0"]
     restart: unless-stopped
     # Health check for production monitoring
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/sse"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/sse"]
       interval: 30s
       timeout: 10s
       retries: 3

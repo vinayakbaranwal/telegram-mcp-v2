@@ -2543,6 +2543,9 @@ async def create_sse_server():
     routes = [
         Route("/sse", endpoint=handle_sse),
         Route("/health", endpoint=health_check),
+        # Fix the /messages endpoint to avoid 307 redirect
+        Route("/messages", endpoint=transport.handle_post_message),
+        # Keep the Mount for compatibility
         Mount("/messages", app=transport.handle_post_message),
     ]
     

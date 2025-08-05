@@ -14,7 +14,7 @@ services:
       - UVICORN_PORT=8000
     # Port mapping for SSE/HTTP transport (external:internal)
     ports:
-      - "3001:8000"
+      - "8000:8000"
     # Production SSE mode - no stdin/tty needed
     command: ["python", "main.py", "-t", "sse"]
     restart: unless-stopped

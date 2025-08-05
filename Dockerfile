@@ -42,11 +42,11 @@ ENV TELEGRAM_SESSION_STRING=""
 
 # SSE/HTTP server configuration
 ENV TELEGRAM_MCP_HOST="0.0.0.0"
-ENV TELEGRAM_MCP_PORT="3001"
+ENV TELEGRAM_MCP_PORT="8000"
 ENV TELEGRAM_MCP_SSE_API_KEY=""
 
-# Expose port 3001 for SSE/HTTP transport
-EXPOSE 3001
+# Expose port for SSE/HTTP transport
+EXPOSE 8000
 
 # Define the command to run the application
 # Default to stdio, but can be overridden with docker run arguments

@@ -54,7 +54,7 @@ SESSION_STRING = os.getenv("TELEGRAM_SESSION_STRING")
 
 # HTTP server configuration
 SSE_API_KEY = os.getenv("TELEGRAM_MCP_SSE_API_KEY")
-DEFAULT_PORT = 3001
+DEFAULT_PORT = 8000
 DEFAULT_HOST = "127.0.0.1"
 
 # Parse command line arguments

@@ -9,12 +9,33 @@ services:
     # Load environment variables from a .env file in the same directory
     env_file:
       - .env
-    # Keep stdin open and allocate a pseudo-TTY, crucial for stdio MCP servers
-    stdin_open: true
-    tty: true
-    # Optional: Uncomment the following lines to mount a local directory
-    # for persisting the Telegram session file if NOT using TELEGRAM_SESSION_STRING.
-    # Replace './telegram_sessions' with your desired host path.
+    # Port mapping for SSE/HTTP transport
+    ports:
+      - "3001:3001"
+    # Production SSE mode - no stdin/tty needed
+    command: ["python", "main.py", "-t", "sse", "--port", "3001", "--host", "0.0.0.0"]
+    restart: unless-stopped
+    # Health check for production monitoring
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/sse"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    # Optional: Uncomment for session file persistence (not recommended for production)
     # volumes:
     #   - ./telegram_sessions:/app
-    restart: unless-stopped 
+
+  # Alternative: STDIO mode for development/testing
+  # Uncomment this section and comment out the above service for stdio mode
+  # telegram-mcp-stdio:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: telegram-mcp-stdio
+  #   env_file:
+  #     - .env
+  #   stdin_open: true
+  #   tty: true
+  #   command: ["python", "main.py", "-t", "stdio"]
+  #   restart: unless-stopped 

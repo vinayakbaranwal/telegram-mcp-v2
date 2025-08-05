@@ -6,11 +6,11 @@ import asyncio
 import sqlite3
 import logging
 import mimetypes
+import argparse
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Union, Any
 
 # Third-party libraries
-import nest_asyncio
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from telethon import TelegramClient, functions, utils
@@ -51,6 +51,28 @@ TELEGRAM_SESSION_NAME = os.getenv("TELEGRAM_SESSION_NAME")
 
 # Check if a string session exists in environment, otherwise use file-based session
 SESSION_STRING = os.getenv("TELEGRAM_SESSION_STRING")
+
+# HTTP server configuration
+SSE_API_KEY = os.getenv("TELEGRAM_MCP_SSE_API_KEY")
+DEFAULT_PORT = 3001
+DEFAULT_HOST = "127.0.0.1"
+
+# Parse command line arguments
+parser = argparse.ArgumentParser(description="Telegram MCP Server")
+parser.add_argument("-t", "--transport", choices=["stdio", "sse"], default="stdio", 
+                   help="Transport type (stdio or sse)")
+parser.add_argument("--mount-path", default=None,
+                   help="Optional mount path for SSE transport")
+parser.add_argument("--port", type=int, default=int(os.getenv("TELEGRAM_MCP_PORT", DEFAULT_PORT)),
+                   help="Port to bind to for SSE transport (default: 3001)")
+parser.add_argument("--host", default=os.getenv("TELEGRAM_MCP_HOST", DEFAULT_HOST),
+                   help="Host to bind to for SSE transport (default: 127.0.0.1)")
+args = parser.parse_args()
+
+# Set Uvicorn environment variables early, before FastMCP initialization
+if args.transport == "sse":
+    os.environ["UVICORN_PORT"] = str(args.port)
+    os.environ["UVICORN_HOST"] = args.host
 
 mcp = FastMCP("telegram")
 
@@ -2437,25 +2459,74 @@ async def get_pinned_messages(chat_id: int) -> str:
         return log_and_format_error("get_pinned_messages", e, chat_id=chat_id)
 
 
+def validate_sse_auth(request_headers: dict) -> bool:
+    """Validate SSE authentication using Bearer token."""
+    if not SSE_API_KEY:
+        # No API key configured, allow all requests
+        return True
+    
+    auth_header = request_headers.get("authorization", "")
+    if not auth_header:
+        return False
+    
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]  # Remove "Bearer " prefix
+        return token == SSE_API_KEY
+    
+    return False
+
+async def initialize_telegram_client():
+    """Initialize and start the Telegram client."""
+    try:
+        print("Starting Telegram client...")
+        await client.start()
+        print("Telegram client started.")
+        return True
+    except Exception as e:
+        print(f"Error starting Telegram client: {e}", file=sys.stderr)
+        if isinstance(e, sqlite3.OperationalError) and "database is locked" in str(e):
+            print(
+                "Database lock detected. Please ensure no other instances are running.",
+                file=sys.stderr,
+            )
+        return False
+
 if __name__ == "__main__":
-    nest_asyncio.apply()
-
-    async def main() -> None:
-        try:
-            # Start the Telethon client non-interactively
-            print("Starting Telegram client...")
-            await client.start()
-
-            print("Telegram client started. Running MCP server...")
-            # Use the asynchronous entrypoint instead of mcp.run()
-            await mcp.run_stdio_async()
-        except Exception as e:
-            print(f"Error starting client: {e}", file=sys.stderr)
-            if isinstance(e, sqlite3.OperationalError) and "database is locked" in str(e):
-                print(
-                    "Database lock detected. Please ensure no other instances are running.",
-                    file=sys.stderr,
-                )
+    # Initialize Telegram client first
+    if not asyncio.run(initialize_telegram_client()):
+        sys.exit(1)
+    
+    # Run the MCP server based on transport type
+    try:
+        if args.transport == "stdio":
+            print("Running MCP server with STDIO transport...")
+            mcp.run(transport="stdio")
+        elif args.transport == "sse":
+            print(f"Starting SSE server on {args.host}:{args.port}")
+            print(f"SSE endpoint: http://{args.host}:{args.port}/sse")
+            print(f"Messages endpoint: http://{args.host}:{args.port}/messages")
+            if SSE_API_KEY:
+                print("SSE authentication enabled (API key required)")
+            else:
+                print("WARNING: SSE authentication disabled (no API key set)")
+            
+            mount_path = getattr(args, 'mount_path', None)
+            if mount_path:
+                print(f"Mount path: {mount_path}")
+            
+            # Environment variables should already be set at module level
+            print(f"Using Uvicorn host: {os.environ.get('UVICORN_HOST', 'default')}")
+            print(f"Using Uvicorn port: {os.environ.get('UVICORN_PORT', 'default')}")
+            
+            # Run SSE server with correct parameters
+            mcp.run(
+                transport="sse",
+                mount_path=mount_path
+            )
+        else:
+            print(f"Invalid transport type: {args.transport}", file=sys.stderr)
             sys.exit(1)
-
-    asyncio.run(main())
+            
+    except Exception as e:
+        print(f"Error running MCP server: {e}", file=sys.stderr)
+        sys.exit(1)

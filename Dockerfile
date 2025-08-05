@@ -9,8 +9,8 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Ensure Python output is sent straight to terminal (useful for logs)
 ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies if needed (e.g., for certain Python packages)
-# RUN apt-get update && apt-get install -y --no-install-recommends some-package && rm -rf /var/lib/apt/lists/*
+# Install system dependencies for health checks and Telethon
+RUN apk add --no-cache wget
 
 # Copy dependency definition files
 # If using Poetry:
@@ -40,8 +40,14 @@ ENV TELEGRAM_SESSION_NAME="telegram_mcp_session"
 # Or provide the session string directly
 ENV TELEGRAM_SESSION_STRING=""
 
-# Expose any ports if the application were a web server (not needed for stdio MCP)
-# EXPOSE 8000
+# SSE/HTTP server configuration
+ENV TELEGRAM_MCP_HOST="0.0.0.0"
+ENV TELEGRAM_MCP_PORT="3001"
+ENV TELEGRAM_MCP_SSE_API_KEY=""
+
+# Expose port 3001 for SSE/HTTP transport
+EXPOSE 3001
 
 # Define the command to run the application
+# Default to stdio, but can be overridden with docker run arguments
 CMD ["python", "main.py"] 
